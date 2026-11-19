@@ -83,32 +83,72 @@ export function fromCsv(text: string): ParseResult {
   return { valid, errors };
 }
 
-/* Pasted questions in the usual exam format:
+/* Pasted questions in the usual exam formats, e.g.
      1. Question text?
      A. one  B. two  C. three  D. four
-     Answer: B                                         */
+     Answer: B
+   Options can be written A.  A)  A:  (A)  [A]  (a)  [a],
+   on one line or several. The answer line can be
+   "Answer: B", "Ans: B", "Answer - (B)" and so on. */
+
+// Option marker for one letter: [A] (A) (a) or A. A) A:
+const marker = (l: string) =>
+  `(?:[\\[(][${l}${l.toLowerCase()}][\\])]|${l}[.):])`;
+
+const OPTIONS = new RegExp(
+  `(?:^|\\s)${marker('A')}\\s*([\\s\\S]*?)` +
+    `\\s+${marker('B')}\\s*([\\s\\S]*?)` +
+    `\\s+${marker('C')}\\s*([\\s\\S]*?)` +
+    `\\s+${marker('D')}\\s*([\\s\\S]*)$`,
+);
+const ANSWER = /\b(?:answer|ans)\b\s*[:.\-=]?\s*[[(]?([A-Da-d])\b[\])]?/i;
+
 export function fromPaste(text: string): ParseResult {
-  const re =
-    /(\d+)[.)]\s*([\s\S]*?)\s*A[.)]\s*([\s\S]*?)\s*B[.)]\s*([\s\S]*?)\s*C[.)]\s*([\s\S]*?)\s*D[.)]\s*([\s\S]*?)\s*Answer\s*:\s*([A-D])\b/gi;
   const valid: DraftQuestion[] = [];
   const errors: string[] = [];
-  let m: RegExpExecArray | null;
-  let count = 0;
-  const src = clean(text);
-  while ((m = re.exec(src))) {
-    count++;
-    const [, num, q, a, b, c, d, ans] = m.map((x) => x?.trim() ?? '');
-    if (!q || !a || !b || !c || !d) {
-      errors.push(`Question ${num}: missing text or an option`);
-    } else {
-      valid.push({ text: q, options: [a, b, c, d], correct: ans.toUpperCase() });
-    }
-  }
-  if (!count) {
+  const src = clean(text).replace(/\r/g, '');
+
+  // Split wherever a line starts with a question number
+  const starts = [...src.matchAll(/^\s*(?:Q(?:uestion)?\s*)?(\d+)\s*[.):-]\s*/gim)];
+  if (!starts.length) {
     errors.push(
-      'No questions found. Number each question, give A–D options, and end with "Answer: X".',
+      'No numbered questions found. Start each question with a number, ' +
+        'e.g. "1." or "1)".',
     );
+    return { valid, errors };
   }
+
+  starts.forEach((m, i) => {
+    const num = m[1];
+    const from = (m.index ?? 0) + m[0].length;
+    const to = starts[i + 1]?.index ?? src.length;
+    let block = src.slice(from, to).trim();
+
+    // Pull out the answer line first
+    const ans = ANSWER.exec(block);
+    if (ans) block = (block.slice(0, ans.index) + ' ').trim();
+
+    const opt = OPTIONS.exec(block);
+    if (!opt) {
+      errors.push(`Question ${num}: couldn't find four options A–D`);
+      return;
+    }
+    const question = block.slice(0, opt.index).trim();
+    const options = opt.slice(1, 5).map((o) => o.replace(/\s+/g, ' ').trim());
+    if (!question) {
+      errors.push(`Question ${num}: the question text is empty`);
+    } else if (options.some((o) => !o)) {
+      errors.push(`Question ${num}: one of the options is empty`);
+    } else if (!ans) {
+      errors.push(`Question ${num}: no "Answer: X" line`);
+    } else {
+      valid.push({
+        text: question.replace(/[ \t]+/g, ' '),
+        options,
+        correct: ans[1].toUpperCase(),
+      });
+    }
+  });
   return { valid, errors };
 }
 

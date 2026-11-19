@@ -1,0 +1,36 @@
+<svg viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg4" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0b1f3a"/>
+      <stop offset="100%" stop-color="#14305a"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="500" fill="url(#bg4)"/>
+  <circle cx="640" cy="110" r="70" fill="#e8c97a" opacity="0.12"/>
+  <circle cx="640" cy="110" r="46" fill="#e8c97a" opacity="0.18"/>
+  <!-- ground line -->
+  <line x1="0" y1="420" x2="800" y2="420" stroke="#c9a84c" stroke-opacity="0.3" stroke-width="2"/>
+  <!-- three seated silhouettes around a book, abstract/no facial features -->
+  <g fill="#c9a84c" opacity="0.9">
+    <!-- left child -->
+    <ellipse cx="270" cy="330" rx="26" ry="28"/>
+    <path d="M230,420 Q235,350 270,352 Q305,350 312,420 Z"/>
+    <!-- middle child -->
+    <ellipse cx="400" cy="310" rx="28" ry="30"/>
+    <path d="M355,420 Q362,335 400,338 Q438,335 448,420 Z"/>
+    <!-- right child -->
+    <ellipse cx="535" cy="330" rx="26" ry="28"/>
+    <path d="M495,420 Q500,350 535,352 Q570,350 578,420 Z"/>
+  </g>
+  <!-- shared open book -->
+  <g transform="translate(400,395)">
+    <path d="M-90,-8 Q-45,-28 0,-8 L0,25 Q-45,10 -90,25 Z" fill="#f7f0db"/>
+    <path d="M90,-8 Q45,-28 0,-8 L0,25 Q45,10 90,25 Z" fill="#faf7f0"/>
+    <path d="M-90,-8 Q-45,-28 0,-8 L0,25 Q-45,10 -90,25 Z" fill="none" stroke="#0b1f3a" stroke-width="1.5"/>
+    <path d="M90,-8 Q45,-28 0,-8 L0,25 Q45,10 90,25 Z" fill="none" stroke="#0b1f3a" stroke-width="1.5"/>
+  </g>
+  <g transform="translate(60,420)">
+    <rect width="230" height="40" rx="20" fill="#0b1f3a" fill-opacity="0.55" stroke="#c9a84c" stroke-opacity="0.5"/>
+    <text x="115" y="26" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-size="16" fill="#e8c97a">Growing Together</text>
+  </g>
+</svg>

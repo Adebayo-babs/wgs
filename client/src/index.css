@@ -1,0 +1,118 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-navy: #0b1f3a;
+  --color-navy-mid: #14305a;
+  --color-navy-light: #1e4480;
+  --color-gold: #c9a84c;
+  --color-gold-light: #e8c97a;
+  --color-gold-pale: #f7f0db;
+  --color-gold-dark: #a07c2a;
+  --color-cream: #faf8f3;
+  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-cream text-slate-800 antialiased;
+  }
+  h1, h2, h3 {
+    @apply font-serif text-navy;
+  }
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+@utility btn-primary {
+  @apply btn bg-navy text-white hover:bg-navy-mid;
+}
+
+@utility btn-gold {
+  @apply btn bg-gold text-navy hover:bg-gold-light;
+}
+
+@utility btn-ghost {
+  @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+}
+
+@utility btn-danger {
+  @apply btn bg-red-600 text-white hover:bg-red-700;
+}
+
+@utility btn-sm {
+  @apply px-3 py-1.5 text-xs;
+}
+
+@utility input {
+  @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-navy-light focus:ring-2 focus:ring-navy-light/20;
+}
+
+@utility label {
+  @apply mb-1 block text-xs font-semibold tracking-wide text-slate-600 uppercase;
+}
+
+@utility card {
+  @apply rounded-xl border border-slate-200 bg-white p-5 shadow-sm;
+}
+
+@utility tbl {
+  @apply w-full border-collapse text-sm;
+  & th {
+    @apply border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-600 uppercase;
+  }
+  & td {
+    @apply border-b border-slate-100 px-3 py-2 align-middle;
+  }
+}
+
+@utility badge {
+  @apply inline-block rounded-full px-2 py-0.5 text-xs font-semibold;
+}
+
+@utility cell-input {
+  @apply w-16 rounded border border-slate-300 px-1.5 py-1 text-center text-sm outline-none focus:border-navy-light;
+}
+
+/* ── Report card (screen + print) ── */
+.rc-sheet {
+  @apply mx-auto max-w-[900px] bg-white p-6 text-[12px] text-slate-900;
+}
+.rc-sheet table {
+  @apply w-full border-collapse;
+}
+.rc-sheet td,
+.rc-sheet th {
+  @apply border border-slate-400 px-1.5 py-1;
+}
+.rc-sheet th {
+  @apply bg-slate-100 text-[10px] font-bold uppercase;
+}
+.rc-k {
+  @apply bg-slate-50 font-semibold;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .rc-sheet,
+  .rc-sheet * {
+    visibility: visible;
+  }
+  .rc-sheet {
+    position: absolute;
+    inset: 0;
+    padding: 0;
+    max-width: none;
+  }
+  .no-print {
+    display: none !important;
+  }
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+}

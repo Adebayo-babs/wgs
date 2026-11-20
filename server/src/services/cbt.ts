@@ -13,6 +13,27 @@ import { bad, HttpError, notFound } from '../middleware/http.js';
 type Oid = Types.ObjectId;
 const LETTERS = ['A', 'B', 'C', 'D'];
 
+/* Shuffle, but keep questions that share a passage next
+   to each other (in random order within the group), so
+   students read a comprehension once. */
+function shuffleKeepingPassages<T extends { passage?: string | null }>(
+  qs: T[],
+) {
+  const groups = new Map<string, T[]>();
+  const singles: T[][] = [];
+  for (const q of qs) {
+    const p = (q.passage ?? '').trim();
+    if (!p) {
+      singles.push([q]);
+      continue;
+    }
+    if (!groups.has(p)) groups.set(p, []);
+    groups.get(p)!.push(q);
+  }
+  const blocks = [...groups.values(), ...singles].map((g) => shuffle(g));
+  return shuffle(blocks).flat();
+}
+
 /** Questions a student can see: their class + general ones. */
 function eligibleFilter(term: Oid, cls: Oid | null, subject?: Oid) {
   const f: Record<string, unknown> = {
@@ -82,7 +103,7 @@ export async function startExam(studentOid: Oid, term: Oid, subject: Oid) {
       subject,
       class: st.class ?? null,
       total: qs.length,
-      items: shuffle(qs).map((q) => ({
+      items: shuffleKeepingPassages(qs).map((q) => ({
         question: q._id,
         optionOrder: shuffle([0, 1, 2, 3]),
         correct: q.correct,
@@ -106,6 +127,7 @@ export async function startExam(studentOid: Oid, term: Oid, subject: Oid) {
         return {
           id: String(q._id),
           text: q.text,
+          passage: q.passage ?? '',
           options: it.optionOrder.map((o) => q.options[o]),
         };
       })

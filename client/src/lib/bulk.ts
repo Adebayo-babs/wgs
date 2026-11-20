@@ -2,6 +2,7 @@ import { clean } from './util';
 
 export interface DraftQuestion {
   text: string;
+  passage?: string; // comprehension passage / section instruction
   options: string[];
   correct: string; // A–D
 }
@@ -89,7 +90,12 @@ export function fromCsv(text: string): ParseResult {
      Answer: B
    Options can be written A.  A)  A:  (A)  [A]  (a)  [a],
    on one line or several. The answer line can be
-   "Answer: B", "Ans: B", "Answer - (B)" and so on. */
+   "Answer: B", "Ans: B", "Answer - (B)" and so on.
+
+   Any other text — a comprehension passage, "SECTION B",
+   "Choose the word nearest in meaning…" — is kept and
+   attached to the questions that follow it, until the
+   next block of such text. */
 
 // Option marker for one letter: [A] (A) (a) or A. A) A:
 const marker = (l: string) =>
@@ -102,6 +108,16 @@ const OPTIONS = new RegExp(
     `\\s+${marker('D')}\\s*([\\s\\S]*)$`,
 );
 const ANSWER = /\b(?:answer|ans)\b\s*[:.\-=]?\s*[[(]?([A-Da-d])\b[\])]?/i;
+
+/** Trim each line and drop runs of blank lines. */
+function tidy(t: string) {
+  return t
+    .split('\n')
+    .map((l) => l.trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
 export function fromPaste(text: string): ParseResult {
   const valid: DraftQuestion[] = [];
@@ -118,15 +134,25 @@ export function fromPaste(text: string): ParseResult {
     return { valid, errors };
   }
 
+  // Text before question 1 (title, passage, instructions)
+  let passage = tidy(src.slice(0, starts[0].index));
+
   starts.forEach((m, i) => {
     const num = m[1];
     const from = (m.index ?? 0) + m[0].length;
     const to = starts[i + 1]?.index ?? src.length;
     let block = src.slice(from, to).trim();
 
-    // Pull out the answer line first
+    // Pull out the answer line. Anything after it is a new
+    // passage or instruction for the questions that follow.
     const ans = ANSWER.exec(block);
-    if (ans) block = (block.slice(0, ans.index) + ' ').trim();
+    let after = '';
+    if (ans) {
+      after = tidy(block.slice(ans.index + ans[0].length));
+      block = block.slice(0, ans.index).trim();
+    }
+    const thisPassage = passage;
+    if (after) passage = after;
 
     const opt = OPTIONS.exec(block);
     if (!opt) {
@@ -146,6 +172,7 @@ export function fromPaste(text: string): ParseResult {
         text: question.replace(/[ \t]+/g, ' '),
         options,
         correct: ans[1].toUpperCase(),
+        passage: thisPassage || undefined,
       });
     }
   });

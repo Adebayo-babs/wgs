@@ -8,6 +8,7 @@ import { useM, useScope } from './shell';
 type Q = {
   _id: string;
   text: string;
+  passage?: string;
   options: string[];
   correct: number;
   subject: { _id: string; name: string };
@@ -88,6 +89,14 @@ export default function Questions() {
             <div key={q._id} className="card flex gap-4 p-4">
               <div className="w-7 shrink-0 font-mono text-sm font-bold text-gold-dark">{i + 1}</div>
               <div className="min-w-0 flex-1">
+                {q.passage && (
+                  <details className="mb-2 rounded bg-gold-pale/50 px-3 py-1.5 text-xs text-slate-600">
+                    <summary className="cursor-pointer font-semibold text-gold-dark">
+                      Passage / instruction
+                    </summary>
+                    <div className="mt-1 whitespace-pre-line">{q.passage}</div>
+                  </details>
+                )}
                 <div className="font-medium whitespace-pre-line">{q.text}</div>
                 <div className="mt-2 grid gap-1 text-sm sm:grid-cols-2">
                   {q.options.map((o, k) => (
@@ -124,6 +133,7 @@ type Target = { subject: string; class: string | null };
 
 function AddOne(p: { target: Target; onClose: () => void; onDone: () => void }) {
   const [text, setText] = useState('');
+  const [passage, setPassage] = useState('');
   const [opts, setOpts] = useState(['', '', '', '']);
   const [correct, setCorrect] = useState<number | null>(null);
   const reset = () => {
@@ -132,7 +142,10 @@ function AddOne(p: { target: Target; onClose: () => void; onDone: () => void }) 
     setCorrect(null);
   };
   const m = useMutation({
-    mutationFn: () => staffApi('/questions', { body: { ...p.target, text, options: opts, correct } }),
+    mutationFn: () =>
+      staffApi('/questions', {
+        body: { ...p.target, text, passage, options: opts, correct },
+      }),
     onSuccess: () => {
       toast.ok('Question added');
       reset();
@@ -150,6 +163,17 @@ function AddOne(p: { target: Target; onClose: () => void; onDone: () => void }) 
           m.mutate();
         }}
       >
+        <Field
+          label="Passage or instruction (optional)"
+          hint="Kept for the next question too, so you can add several questions for one passage."
+        >
+          <textarea
+            className="input min-h-16 text-xs"
+            placeholder="e.g. a comprehension passage, or “Choose the word nearest in meaning…”"
+            value={passage}
+            onChange={(e) => setPassage(e.target.value)}
+          />
+        </Field>
         <Field label="Question">
           <textarea className="input min-h-24" value={text} onChange={(e) => setText(e.target.value)} required />
         </Field>
@@ -225,6 +249,8 @@ function BulkAdd(p: { kind: 'csv' | 'paste'; target: Target; onClose: () => void
         <div className="space-y-3">
           <p className="text-sm text-slate-600">
             Number each question, give options A–D, and end each one with <b>Answer: X</b>.
+            Passages and instructions (e.g. “Read the passage carefully…”) are kept and shown
+            to students above the questions that follow them.
           </p>
           <textarea
             className="input min-h-48 font-mono text-xs"
@@ -249,14 +275,23 @@ function BulkAdd(p: { kind: 'csv' | 'paste'; target: Target; onClose: () => void
           <div className="max-h-72 overflow-y-auto rounded border border-slate-200">
             <table className="tbl">
               <tbody>
-                {res.valid.map((q, i) => (
+                {res.valid.map((q, i) => [
+                  q.passage && q.passage !== res.valid[i - 1]?.passage ? (
+                    <tr key={`p${i}`}>
+                      <td colSpan={4} className="bg-gold-pale/50 text-xs whitespace-pre-line text-slate-600">
+                        <b className="text-gold-dark">Passage / instruction for the questions below:</b>
+                        {'\n'}
+                        {q.passage.length > 300 ? q.passage.slice(0, 300) + '…' : q.passage}
+                      </td>
+                    </tr>
+                  ) : null,
                   <tr key={i}>
                     <td className="w-8 text-slate-400">{i + 1}</td>
                     <td>{q.text}</td>
                     <td className="text-xs text-slate-500">{q.options.map((o, k) => `${L[k]}. ${o}`).join('  ')}</td>
                     <td className="font-bold text-emerald-700">{q.correct}</td>
-                  </tr>
-                ))}
+                  </tr>,
+                ])}
               </tbody>
             </table>
           </div>

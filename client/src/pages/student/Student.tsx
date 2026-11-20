@@ -235,7 +235,12 @@ export function ExamLobby() {
 type Paper = {
   attemptId: string;
   subject: string;
-  questions: { id: string; text: string; options: string[] }[];
+  questions: {
+    id: string;
+    text: string;
+    passage?: string;
+    options: string[];
+  }[];
 };
 const LETTERS = ['A', 'B', 'C', 'D'];
 
@@ -325,6 +330,20 @@ export function TakeExam() {
             style={{ width: `${(answered / p.questions.length) * 100}%` }}
           />
         </div>
+        {q.passage && (
+          <details
+            key={q.passage}
+            open
+            className="mb-4 rounded-lg border border-gold/40 bg-gold-pale/40 p-3"
+          >
+            <summary className="cursor-pointer text-sm font-semibold text-gold-dark">
+              Read this first
+            </summary>
+            <div className="mt-2 max-h-72 overflow-y-auto text-sm leading-relaxed whitespace-pre-line">
+              {q.passage}
+            </div>
+          </details>
+        )}
         <p className="mb-5 text-lg font-medium whitespace-pre-line">{q.text}</p>
         <div className="space-y-2">
           {q.options.map((o, k) => (

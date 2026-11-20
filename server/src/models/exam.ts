@@ -10,6 +10,10 @@ const questionSchema = new Schema(
     class: { type: Schema.Types.ObjectId, ref: 'SchoolClass', default: null },
     teacher: { type: Schema.Types.ObjectId, ref: 'Staff', default: null },
     text: { type: String, required: true },
+    // Comprehension passage or section instruction shown
+    // above the question. Questions sharing one are kept
+    // together when the exam is shuffled.
+    passage: { type: String, default: '' },
     options: {
       type: [String],
       validate: (v: string[]) => v.length === 4,

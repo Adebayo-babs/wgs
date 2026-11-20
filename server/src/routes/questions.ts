@@ -14,6 +14,11 @@ const LETTER: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
 
 const item = z.object({
   text: z.string().transform(clean).pipe(z.string().min(1, 'Question is empty')),
+  passage: z
+    .string()
+    .max(20000, 'Passage is too long')
+    .transform(clean)
+    .optional(),
   options: z
     .array(z.string().transform(clean).pipe(z.string().min(1, 'Empty option')))
     .length(4, 'Four options are required'),
@@ -151,6 +156,7 @@ r.post('/copy', async (req, res) => {
       class: x.class,
       teacher: req.staff!.id,
       text: x.text,
+      passage: x.passage ?? '',
       options: x.options,
       correct: x.correct,
     })),

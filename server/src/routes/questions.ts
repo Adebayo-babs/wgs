@@ -6,6 +6,10 @@ import { requireStaff, teaches, type StaffCtx } from '../middleware/auth.js';
 import { bad, forbidden, notFound, oid, parse, q } from '../middleware/http.js';
 import { clean } from '../lib/text.js';
 import { currentTerm, termOrCurrent } from '../services/terms.js';
+import {
+  questionImpact,
+  removeQuestions,
+} from '../services/questionDelete.js';
 
 const r = Router();
 r.use(requireStaff);
@@ -126,10 +130,32 @@ r.patch('/:id', async (req, res) => {
   res.json(doc);
 });
 
+// Deleting a question also takes it out of any exam a
+// student already sat, and re-scores that exam.
 r.delete('/:id', async (req, res) => {
   const doc = await loadOwned(req);
-  await doc.deleteOne();
-  res.json({ ok: true });
+  res.json(await removeQuestions([doc._id]));
+});
+
+/* Delete every question for one subject + class in the
+   current term. `dryRun: true` only reports what would go,
+   for the confirmation box. */
+r.post('/delete-many', async (req, res) => {
+  const b = parse(
+    target.extend({ dryRun: z.boolean().default(false) }),
+    req.body,
+  );
+  assertTeaches(req.staff!, b.subject, b.class);
+  const term = await currentTerm();
+  const qids = await Question.find({
+    term: term._id,
+    subject: oid(b.subject, 'subject'),
+    class: b.class ? oid(b.class, 'class') : null,
+  }).distinct('_id');
+  if (!qids.length) throw bad('There are no questions to delete');
+  res.json(
+    b.dryRun ? await questionImpact(qids) : await removeQuestions(qids),
+  );
 });
 
 /* Copy a subject's questions from an earlier term into the

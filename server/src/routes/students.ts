@@ -1,9 +1,15 @@
 import { Router, type Request } from 'express';
 import { z } from 'zod';
-import { ExamAttempt, Student } from '../models/index.js';
+import {
+  ExamAttempt,
+  Passport,
+  Student,
+  TermResult,
+} from '../models/index.js';
 import {
   formTeacherOf,
   linkedToClass,
+  requireAdmin,
   requireStaff,
 } from '../middleware/auth.js';
 import {
@@ -150,6 +156,32 @@ r.post('/:id/password', async (req, res) => {
   st.set('passwordHash', await hashPassword(b.password));
   st.set('legacyHash', null);
   await st.save();
+  res.json({ ok: true });
+});
+
+/* ── Delete (admin only) ── removes the student and
+   everything recorded for them: exams, term results
+   (every term) and passport photo. Class positions
+   recalculate on their own next time a report is opened. */
+r.get('/:id/impact', requireAdmin, async (req, res) => {
+  const id = oid(req.params.id);
+  const [exams, results] = await Promise.all([
+    ExamAttempt.countDocuments({ student: id }),
+    TermResult.countDocuments({ student: id }),
+  ]);
+  res.json({ exams, results });
+});
+
+r.delete('/:id', requireAdmin, async (req, res) => {
+  const id = oid(req.params.id);
+  const st = await Student.findById(id).lean();
+  if (!st) throw notFound('Student');
+  await Promise.all([
+    ExamAttempt.deleteMany({ student: id }),
+    TermResult.deleteMany({ student: id }),
+    Passport.deleteMany({ student: id }),
+  ]);
+  await Student.deleteOne({ _id: id });
   res.json({ ok: true });
 });
 

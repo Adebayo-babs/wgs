@@ -36,6 +36,50 @@ export default function Questions() {
     enabled: !!cls && !!subj,
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ['questions'] });
+  type Impact = {
+    questions: number;
+    attemptsChanged: number;
+    attemptsRemoved: number;
+  };
+  const delAll = useMutation({
+    mutationFn: async () => {
+      const body = { ...target };
+      const i = await staffApi<Impact>('/questions/delete-many', {
+        body: { ...body, dryRun: true },
+      });
+      const where = `${sc.subjectName(subj)} · ${
+        cls === 'general' ? 'every class' : sc.className(cls)
+      }`;
+      const lines = [
+        `Delete ALL ${i.questions} question(s) for ${where}?`,
+        'This cannot be undone.',
+      ];
+      if (i.attemptsRemoved) {
+        lines.push(
+          '',
+          `${i.attemptsRemoved} student exam(s) will be removed, with the ` +
+            'CBT score on their report cards. Those students can sit ' +
+            'this subject again once new questions are added.',
+        );
+      }
+      if (i.attemptsChanged) {
+        lines.push(
+          '',
+          `${i.attemptsChanged} other exam(s) will be re-scored without ` +
+            'these questions.',
+        );
+      }
+      if (!confirm(lines.join('\n'))) return null;
+      return staffApi<Impact>('/questions/delete-many', { body });
+    },
+    onSuccess: (r) => {
+      if (!r) return;
+      toast.ok(`${r.questions} question(s) deleted`);
+      refresh();
+      qc.invalidateQueries({ queryKey: ['attempts'] });
+    },
+    onError: toast.err,
+  });
   const del = useMutation({
     mutationFn: (id: string) => staffApi(`/questions/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
@@ -84,7 +128,16 @@ export default function Questions() {
       {list.data && !list.data.length && <Empty>No questions yet for this class and subject.</Empty>}
       {list.data && list.data.length > 0 && (
         <div className="space-y-2">
-          <div className="text-sm text-slate-500">{list.data.length} question(s)</div>
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-slate-500">{list.data.length} question(s)</div>
+            <button
+              className="btn-sm btn text-red-600 hover:bg-red-50"
+              disabled={delAll.isPending}
+              onClick={() => delAll.mutate()}
+            >
+              {delAll.isPending ? 'Deleting…' : `Delete all ${list.data.length}`}
+            </button>
+          </div>
           {list.data.map((q, i) => (
             <div key={q._id} className="card flex gap-4 p-4">
               <div className="w-7 shrink-0 font-mono text-sm font-bold text-gold-dark">{i + 1}</div>

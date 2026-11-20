@@ -163,6 +163,33 @@ function StudentForm({ s, onClose }: { s: StudentRow | null; onClose: () => void
     onError: toast.err,
   });
 
+  const remove = useMutation({
+    mutationFn: async () => {
+      const i = await staffApi<{ exams: number; results: number }>(
+        `/students/${s!._id}/impact`,
+      );
+      const msg = [
+        `Delete ${s!.name} (${s!.studentId})? This cannot be undone.`,
+        '',
+        `• Their login and passport photo`,
+        `• ${i.exams} CBT exam(s)`,
+        `• ${i.results} term result(s) / report card(s)`,
+        '',
+        'Class positions will recalculate without them.',
+      ].join('\n');
+      if (!confirm(msg)) return false;
+      await staffApi(`/students/${s!._id}`, { method: 'DELETE' });
+      return true;
+    },
+    onSuccess: (done) => {
+      if (!done) return;
+      toast.ok(`${s!.name} deleted`);
+      qc.invalidateQueries();
+      onClose();
+    },
+    onError: toast.err,
+  });
+
   return (
     <Modal title={s ? `Edit ${s.name}` : 'Add a student'} onClose={onClose} wide>
       <form
@@ -222,7 +249,17 @@ function StudentForm({ s, onClose }: { s: StudentRow | null; onClose: () => void
             />
           </label>
         </div>
-        <div className="flex justify-end gap-2 md:col-span-3">
+        <div className="flex items-center justify-end gap-2 md:col-span-3">
+          {s && sc.me.isAdmin && (
+            <button
+              type="button"
+              className="btn mr-auto text-red-600 hover:bg-red-50"
+              disabled={remove.isPending}
+              onClick={() => remove.mutate()}
+            >
+              {remove.isPending ? 'Deleting…' : 'Delete student'}
+            </button>
+          )}
           <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn-primary" disabled={save.isPending}>{save.isPending ? 'Saving…' : 'Save'}</button>
         </div>

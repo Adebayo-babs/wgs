@@ -6,6 +6,7 @@ import type { ExamReview, Report } from '../../lib/types';
 import { GRADE_COLOR, gradeOf, ordinal, relTime } from '../../lib/util';
 import { Empty, Field, Modal, PageHead, Spinner, toast } from '../../components/ui';
 import ReportCard from '../../components/ReportCard';
+import { TeacherOverview } from './Overview';
 import { ReviewView } from '../student/Student';
 import { TermSelect, useM, useScope } from './shell';
 
@@ -156,10 +157,13 @@ export function ScoreEntry() {
   const sc = useScope();
   const m = useM();
   const qc = useQueryClient();
+  const [sp] = useSearchParams();
   const [term, setTerm] = useState(m.currentTerm?.id ?? '');
-  const [cls, setCls] = useState(sc.subjectClasses[0]?._id ?? '');
+  const [cls, setCls] = useState(
+    sp.get('class') ?? sc.subjectClasses[0]?._id ?? '',
+  );
   const subjects = sc.subjectsFor(cls);
-  const [subject, setSubject] = useState('');
+  const [subject, setSubject] = useState(sp.get('subject') ?? '');
   const subj = subjects.some((s) => s._id === subject) ? subject : subjects[0]?._id ?? '';
   const key = ['scores', term, cls, subj];
   const q = useQuery({
@@ -331,8 +335,11 @@ export function ClassSheet() {
   const sc = useScope();
   const m = useM();
   const qc = useQueryClient();
+  const [sp] = useSearchParams();
   const [term, setTerm] = useState(m.currentTerm?.id ?? '');
-  const [cls, setCls] = useState(sc.formClasses[0]?._id ?? '');
+  const [cls, setCls] = useState(
+    sp.get('class') ?? sc.formClasses[0]?._id ?? '',
+  );
   const [tab, setTab] = useState<'attendance' | 'traits' | 'remarks'>('attendance');
   const q = useQuery({
     queryKey: ['class-sheet', term, cls],
@@ -667,6 +674,17 @@ export function Dashboard() {
     ['Questions this term', questions.data?.length ?? 0, '/staff/questions'],
     ['Exams submitted', submitted, '/staff/cbt'],
   ];
+  if (!m.me.isAdmin) {
+    return (
+      <>
+        <PageHead
+          title={`Welcome, ${m.me.name}`}
+          sub={m.currentTerm ? `${m.currentTerm.label}, ${m.currentTerm.session} session` : ''}
+        />
+        <TeacherOverview id="me" self />
+      </>
+    );
+  }
   return (
     <>
       <PageHead title={`Welcome, ${m.me.name}`} sub={m.currentTerm ? `${m.currentTerm.label}, ${m.currentTerm.session} session` : ''} />

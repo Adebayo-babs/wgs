@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { staffApi } from '../../api/client';
 import { CSV_TEMPLATE, decodeCsv, fromCsv, fromPaste, type ParseResult } from '../../lib/bulk';
@@ -22,9 +23,12 @@ export default function Questions() {
   const sc = useScope();
   const m = useM();
   const qc = useQueryClient();
-  const [cls, setCls] = useState(sc.subjectClasses[0]?._id ?? '');
+  const [sp] = useSearchParams();
+  const [cls, setCls] = useState(
+    sp.get('class') ?? sc.subjectClasses[0]?._id ?? '',
+  );
   const subjects = cls === 'general' ? (sc.me.isAdmin ? m.subjects : m.subjects.filter((s) => sc.me.assignments.some((a) => a.subject === s._id))) : sc.subjectsFor(cls);
-  const [subject, setSubject] = useState('');
+  const [subject, setSubject] = useState(sp.get('subject') ?? '');
   const subj = subjects.some((s) => s._id === subject) ? subject : subjects[0]?._id ?? '';
   const [mode, setMode] = useState<'one' | 'csv' | 'paste' | null>(null);
   const [copyOpen, setCopyOpen] = useState(false);

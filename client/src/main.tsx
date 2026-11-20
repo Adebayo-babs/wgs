@@ -27,6 +27,7 @@ import {
 } from './pages/staff/Results';
 import { Students, Team } from './pages/staff/People';
 import { SchoolSetup, Terms } from './pages/staff/Admin';
+import { StaffOverviewPage } from './pages/staff/Overview';
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -70,6 +71,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="reports/:studentId" element={<ReportView />} />
             <Route path="students" element={<Students />} />
             <Route path="team" element={<Team />} />
+            <Route path="team/:id" element={<StaffOverviewPage />} />
             <Route path="terms" element={<Terms />} />
             <Route path="settings" element={<SchoolSetup />} />
             <Route path="password" element={<ChangePassword kind="staff" />} />

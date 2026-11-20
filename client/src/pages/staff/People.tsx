@@ -303,7 +303,10 @@ export function Team() {
                   {!s.active && ' · inactive'}
                 </div>
               </div>
-              <button className="btn-sm btn-ghost" onClick={() => setEdit(s)}>Edit</button>
+              <div className="flex gap-1">
+                <Link to={`/staff/team/${s._id}`} className="btn-sm btn-ghost">View</Link>
+                <button className="btn-sm btn-ghost" onClick={() => setEdit(s)}>Edit</button>
+              </div>
             </div>
             <div className="mb-2 text-xs text-slate-500">
               {s.questionCount} questions this term · {s.submissionCount} exam submissions

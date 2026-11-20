@@ -10,8 +10,20 @@ import {
   getSettings,
 } from '../models/index.js';
 import { requireAdmin, requireStaff } from '../middleware/auth.js';
-import { bad, notFound, oid, parse } from '../middleware/http.js';
-import { currentTermOrNull, listSessions } from '../services/terms.js';
+import {
+  bad,
+  forbidden,
+  notFound,
+  oid,
+  parse,
+  q,
+} from '../middleware/http.js';
+import {
+  currentTermOrNull,
+  listSessions,
+  termOrCurrent,
+} from '../services/terms.js';
+import { teacherOverview } from '../services/teacherOverview.js';
 import { clean } from '../lib/text.js';
 
 const r = Router();
@@ -47,6 +59,16 @@ r.get('/meta', async (req, res) => {
       psychomotorTraits: settings.psychomotorTraits,
     },
   });
+});
+
+/* ── Teacher overview ── /overview/me for a teacher's own
+   dashboard; any staff id for the admin. */
+r.get('/overview/:id', async (req, res) => {
+  const me = req.staff!;
+  const id = req.params.id === 'me' ? me.id : oid(req.params.id);
+  if (!me.isAdmin && String(id) !== String(me.id)) throw forbidden();
+  const term = await termOrCurrent(q(req, 'term'));
+  res.json(await teacherOverview(id, term._id));
 });
 
 /* ── Classes (admin) ── */

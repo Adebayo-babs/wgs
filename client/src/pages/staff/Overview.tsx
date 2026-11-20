@@ -86,7 +86,11 @@ export function TeacherOverview({ id, self }: { id: string; self?: boolean }) {
 
   const tiles: [string, number, string?][] = [
     ['Students', t.students, `across ${t.classes} class(es)`],
-    ['Subjects', t.subjects],
+    [
+      'Subjects',
+      t.subjects,
+      `${t.subjects - t.subjectsWithoutQuestions} have exam questions`,
+    ],
     [
       'Questions',
       t.questions,
@@ -109,8 +113,9 @@ export function TeacherOverview({ id, self }: { id: string; self?: boolean }) {
 
       {t.subjectsWithoutQuestions > 0 && (
         <div className="rounded-lg bg-red-50 p-3 text-sm text-red-800">
-          {t.subjectsWithoutQuestions} subject(s) have no exam questions yet
-          {self ? ', so students can’t sit them.' : '.'}
+          {t.subjects - t.subjectsWithoutQuestions} of {t.subjects} subjects
+          have exam questions. {t.subjectsWithoutQuestions} still have none
+          {self ? ', so students can’t sit them yet.' : '.'}
         </div>
       )}
 

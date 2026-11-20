@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { staffApi } from '../../api/client';
@@ -32,6 +32,50 @@ export default function Questions() {
   const subj = subjects.some((s) => s._id === subject) ? subject : subjects[0]?._id ?? '';
   const [mode, setMode] = useState<'one' | 'csv' | 'paste' | null>(null);
   const [copyOpen, setCopyOpen] = useState(false);
+
+  /* Admin typing questions in for a teacher: pick whose
+     questions they are. Defaults to the teacher assigned to
+     this subject and class when there's exactly one. */
+  type StaffLite = {
+    _id: string;
+    name: string;
+    role: string;
+    active: boolean;
+    assignments: { subject: { _id: string }; class: { _id: string } }[];
+  };
+  const staffList = useQuery({
+    queryKey: ['staff'],
+    queryFn: () => staffApi<StaffLite[]>('/staff'),
+    enabled: sc.me.isAdmin,
+  });
+  const teachers = (staffList.data ?? []).filter(
+    (t) => t.active && t.role === 'teacher',
+  );
+  const assignedHere = teachers.filter((t) =>
+    t.assignments.some(
+      (a) =>
+        a.subject?._id === subj &&
+        (cls === 'general' || a.class?._id === cls),
+    ),
+  );
+  const [owner, setOwner] = useState('');
+  useEffect(() => {
+    setOwner(assignedHere.length === 1 ? assignedHere[0]._id : '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cls, subj, staffList.data]);
+  const ownerName = teachers.find((t) => t._id === owner)?.name;
+  const reassign = useMutation({
+    mutationFn: () =>
+      staffApi<{ updated: number }>('/questions/reassign', {
+        body: { ...target, owner },
+      }),
+    onSuccess: (r) => {
+      toast.ok(`${r.updated} question(s) now belong to ${ownerName}`);
+      refresh();
+      qc.invalidateQueries({ queryKey: ['overview'] });
+    },
+    onError: toast.err,
+  });
 
   const key = ['questions', cls, subj];
   const list = useQuery({
@@ -96,7 +140,11 @@ export default function Questions() {
   if (!sc.subjectClasses.length) {
     return <Empty>You have no subject assignments yet. Ask the admin to assign you a subject and class.</Empty>;
   }
-  const target = { subject: subj, class: cls === 'general' ? null : cls };
+  const target = {
+    subject: subj,
+    class: cls === 'general' ? null : cls,
+    owner: owner || undefined,
+  };
 
   return (
     <>
@@ -120,6 +168,27 @@ export default function Questions() {
             ))}
           </select>
         </Field>
+        {sc.me.isAdmin && (
+          <Field label="Questions belong to">
+            <select className="input" value={owner} onChange={(e) => setOwner(e.target.value)}>
+              <option value="">Me (admin)</option>
+              {assignedHere.length > 0 && (
+                <optgroup label="Teaches this subject">
+                  {assignedHere.map((t) => (
+                    <option key={t._id} value={t._id}>{t.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              <optgroup label="Other teachers">
+                {teachers
+                  .filter((t) => !assignedHere.includes(t))
+                  .map((t) => (
+                    <option key={t._id} value={t._id}>{t.name}</option>
+                  ))}
+              </optgroup>
+            </select>
+          </Field>
+        )}
         <div className="flex flex-wrap gap-2">
           <button className="btn-primary" disabled={!subj} onClick={() => setMode('one')}>+ Add question</button>
           <button className="btn-ghost" disabled={!subj} onClick={() => setMode('csv')}>Upload CSV</button>
@@ -134,6 +203,19 @@ export default function Questions() {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <div className="text-sm text-slate-500">{list.data.length} question(s)</div>
+            <div className="flex gap-1">
+            {sc.me.isAdmin && owner && (
+              <button
+                className="btn-sm btn-ghost"
+                disabled={reassign.isPending}
+                onClick={() =>
+                  confirm(`Make all ${list.data.length} question(s) belong to ${ownerName}?`) &&
+                  reassign.mutate()
+                }
+              >
+                Give all to {ownerName}
+              </button>
+            )}
             <button
               className="btn-sm btn text-red-600 hover:bg-red-50"
               disabled={delAll.isPending}
@@ -141,6 +223,7 @@ export default function Questions() {
             >
               {delAll.isPending ? 'Deleting…' : `Delete all ${list.data.length}`}
             </button>
+            </div>
           </div>
           {list.data.map((q, i) => (
             <div key={q._id} className="card flex gap-4 p-4">

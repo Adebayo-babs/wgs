@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { Types } from 'mongoose';
-import { ExamAttempt, Question } from '../models/index.js';
+import { ExamAttempt, Question, Staff } from '../models/index.js';
 import { requireStaff, teaches, type StaffCtx } from '../middleware/auth.js';
 import { bad, forbidden, notFound, oid, parse, q } from '../middleware/http.js';
 import { clean } from '../lib/text.js';
@@ -40,7 +40,18 @@ const item = z.object({
 const target = z.object({
   subject: z.string().min(1, 'Choose a subject'),
   class: z.string().nullable(), // null = every class
+  // Admin only: credit the questions to this teacher
+  // instead of the admin (when typing them in for someone).
+  owner: z.string().optional(),
 });
+
+/** Who the new questions belong to. */
+async function ownerFor(s: StaffCtx, owner?: string) {
+  if (!owner || !s.isAdmin || owner === String(s.id)) return s.id;
+  const t = await Staff.findById(oid(owner, 'teacher')).lean();
+  if (!t) throw bad('That teacher was not found');
+  return t._id;
+}
 
 function assertTeaches(s: StaffCtx, subject: string, cls: string | null) {
   if (!teaches(s, subject, cls)) {
@@ -86,7 +97,7 @@ r.post('/', async (req, res) => {
     term: term._id,
     subject: oid(t.subject, 'subject'),
     class: t.class ? oid(t.class, 'class') : null,
-    teacher: req.staff!.id,
+    teacher: await ownerFor(req.staff!, t.owner),
   });
   res.status(201).json(created);
 });
@@ -99,13 +110,14 @@ r.post('/bulk', async (req, res) => {
   ).items;
   assertTeaches(req.staff!, t.subject, t.class);
   const term = await currentTerm();
+  const teacher = await ownerFor(req.staff!, t.owner);
   await Question.insertMany(
     items.map((b) => ({
       ...b,
       term: term._id,
       subject: oid(t.subject),
       class: t.class ? oid(t.class) : null,
-      teacher: req.staff!.id,
+      teacher,
     })),
   );
   res.status(201).json({ added: items.length });
@@ -156,6 +168,25 @@ r.post('/delete-many', async (req, res) => {
   res.json(
     b.dryRun ? await questionImpact(qids) : await removeQuestions(qids),
   );
+});
+
+/* Admin: credit every question for one subject + class in
+   the current term to a teacher (e.g. questions the admin
+   typed in for them). */
+r.post('/reassign', async (req, res) => {
+  if (!req.staff!.isAdmin) throw forbidden('Admin only');
+  const b = parse(target.extend({ owner: z.string().min(1) }), req.body);
+  const teacher = await ownerFor(req.staff!, b.owner);
+  const term = await currentTerm();
+  const r0 = await Question.updateMany(
+    {
+      term: term._id,
+      subject: oid(b.subject, 'subject'),
+      class: b.class ? oid(b.class, 'class') : null,
+    },
+    { teacher },
+  );
+  res.json({ updated: r0.modifiedCount });
 });
 
 /* Copy a subject's questions from an earlier term into the

@@ -665,9 +665,9 @@ export function ReportView() {
 export function Dashboard() {
   const m = useM();
   const sc = useScope();
-  const students = useQuery({ queryKey: ['students', '', 'active', ''], queryFn: () => staffApi<unknown[]>('/students') });
-  const questions = useQuery({ queryKey: ['q-count'], queryFn: () => staffApi<unknown[]>('/questions'), enabled: sc.subjectClasses.length > 0 });
-  const attempts = useQuery({ queryKey: ['attempts', '', ''], queryFn: () => staffApi<{ status: string }[]>('/attempts') });
+  const students = useQuery({ queryKey: ['students', '', 'active', ''], queryFn: () => staffApi<unknown[]>('/students'), enabled: m.me.isAdmin });
+  const questions = useQuery({ queryKey: ['q-count'], queryFn: () => staffApi<unknown[]>('/questions'), enabled: m.me.isAdmin });
+  const attempts = useQuery({ queryKey: ['attempts', '', ''], queryFn: () => staffApi<{ status: string }[]>('/attempts'), enabled: m.me.isAdmin });
   const submitted = useMemo(() => attempts.data?.filter((a) => a.status === 'submitted').length, [attempts.data]);
   const tiles: [string, unknown, string][] = [
     ['Students', students.data?.length, '/staff/students'],

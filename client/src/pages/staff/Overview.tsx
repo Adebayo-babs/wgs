@@ -28,6 +28,7 @@ type FormRow = {
 };
 
 export type Overview = {
+  term: string;
   staff: {
     id: string;
     name: string;
@@ -39,6 +40,7 @@ export type Overview = {
     students: number;
     classes: number;
     subjects: number;
+    questions: number;
     questionsByThem: number;
     examsTaken: number;
     subjectsWithoutQuestions: number;
@@ -85,8 +87,12 @@ export function TeacherOverview({ id, self }: { id: string; self?: boolean }) {
   const tiles: [string, number, string?][] = [
     ['Students', t.students, `across ${t.classes} class(es)`],
     ['Subjects', t.subjects],
-    ['Questions set', t.questionsByThem, 'this term'],
-    ['Exams taken', t.examsTaken, 'this term'],
+    [
+      'Questions',
+      t.questions,
+      `${t.questionsByThem} typed in by ${self ? 'you' : 'them'}`,
+    ],
+    ['Exams taken', t.examsTaken, d.term],
   ];
 
   return (
@@ -109,8 +115,9 @@ export function TeacherOverview({ id, self }: { id: string; self?: boolean }) {
       )}
 
       <div className="card overflow-x-auto p-0">
-        <div className="px-4 pt-4 pb-2 font-bold">
-          {self ? 'My subjects' : 'Subjects taught'}
+        <div className="px-4 pt-4 pb-2">
+          <span className="font-bold">{self ? 'My subjects' : 'Subjects taught'}</span>
+          <span className="ml-2 text-xs text-slate-400">{d.term}</span>
         </div>
         {!d.subjects.length ? (
           <p className="px-4 pb-4 text-sm text-slate-500">

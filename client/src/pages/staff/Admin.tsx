@@ -58,6 +58,9 @@ export function Terms() {
           <button className="btn-primary" onClick={() => create.mutate()}>Create</button>
         </div>
       )}
+      {sessions.flatMap((s) => s.terms).filter((t) => t.isCurrent).map((t) => (
+        <ClassMismatches key={t._id} termId={t._id} />
+      ))}
       <div className="space-y-5">
         {sessions.map((s) => (
           <div key={s._id} className="card">
@@ -129,6 +132,103 @@ export function Terms() {
       {editTerm && <TermForm t={editTerm} onClose={() => setEditTerm(null)} onDone={refresh} />}
       {delivery && <Delivery t={delivery} onClose={() => setDelivery(null)} onResend={refresh} />}
       {promote && <Promotion s={promote} onClose={() => setPromote(null)} onDone={refresh} />}
+    </>
+  );
+}
+
+type Mismatch = {
+  student: string;
+  studentId: string;
+  name: string;
+  from: string;
+  to: string;
+};
+
+/* Students moved to another class during the term whose
+   results are still filed under the old class (moves made
+   before this was automatic). */
+function ClassMismatches({ termId }: { termId: string }) {
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ['mismatches', termId],
+    queryFn: () => staffApi<Mismatch[]>(`/admin/terms/${termId}/class-mismatches`),
+  });
+  const [open, setOpen] = useState(false);
+  const [pick, setPick] = useState<Set<string>>(new Set());
+  const fix = useMutation({
+    mutationFn: () =>
+      staffApi<{ moved: number }>(`/admin/terms/${termId}/class-mismatches/fix`, {
+        body: { students: [...pick] },
+      }),
+    onSuccess: (r) => {
+      toast.ok(`${r.moved} student(s) moved`);
+      setOpen(false);
+      qc.invalidateQueries();
+    },
+    onError: toast.err,
+  });
+  const rows = q.data ?? [];
+  if (!rows.length) return null;
+  return (
+    <>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+        <span>
+          {rows.length} student(s) are now in a different class, but this
+          term's results are still filed under their old class.
+        </span>
+        <button
+          className="btn-sm btn-ghost"
+          onClick={() => {
+            setPick(new Set(rows.map((r) => r.student)));
+            setOpen(true);
+          }}
+        >
+          Review
+        </button>
+      </div>
+      {open && (
+        <Modal title="Results filed under an old class" onClose={() => setOpen(false)} wide>
+          <p className="mb-3 text-sm text-slate-600">
+            Ticked students will have this term's results (scores, exams,
+            report card, position) moved to the class they're in now. Untick
+            anyone who should stay in their old class for this term's report,
+            for example a student moved early for next session.
+          </p>
+          <div className="max-h-[55vh] overflow-y-auto">
+            <table className="tbl">
+              <thead>
+                <tr><th /><th>Student</th><th>Results filed under</th><th>Class now</th></tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.student}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={pick.has(r.student)}
+                        onChange={(e) => {
+                          const n = new Set(pick);
+                          if (e.target.checked) n.add(r.student);
+                          else n.delete(r.student);
+                          setPick(n);
+                        }}
+                      />
+                    </td>
+                    <td>{r.name} <span className="text-xs text-slate-400">{r.studentId}</span></td>
+                    <td>{r.from}</td>
+                    <td className="font-semibold">{r.to}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button className="btn-primary" disabled={!pick.size || fix.isPending} onClick={() => fix.mutate()}>
+              Move {pick.size} student(s)' results
+            </button>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

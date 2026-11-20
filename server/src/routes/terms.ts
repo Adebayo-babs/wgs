@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { Types } from 'mongoose';
 import {
   AcademicSession,
   Student,
@@ -130,6 +131,63 @@ r.get('/terms/:id/delivery', async (req, res) => {
       };
     }),
   });
+});
+
+/* ── Results filed under an old class ──
+   A student moved to another class during the term
+   (before this was automatic) still has this term's
+   results under the old class. List them, and optionally
+   move the results to the student's current class. */
+async function classMismatches(termId: Types.ObjectId) {
+  const results = await TermResult.find({ term: termId })
+    .select('student class')
+    .populate('class', 'name')
+    .lean();
+  const students = await Student.find({
+    _id: { $in: results.map((r) => r.student) },
+    status: 'active',
+  })
+    .select('studentId name class')
+    .populate('class', 'name')
+    .lean();
+  const byId = new Map(students.map((s) => [String(s._id), s]));
+  type C = { _id: unknown; name: string } | null;
+  return results.flatMap((r) => {
+    const st = byId.get(String(r.student));
+    const from = r.class as unknown as C;
+    const to = st?.class as unknown as C;
+    if (!st || !to || String(from?._id) === String(to._id)) return [];
+    return [
+      {
+        resultId: r._id,
+        student: st._id,
+        studentId: st.studentId,
+        name: st.name,
+        from: from?.name ?? 'no class',
+        to: to.name,
+        toId: to._id,
+      },
+    ];
+  });
+}
+
+r.get('/terms/:id/class-mismatches', async (req, res) => {
+  res.json(await classMismatches(oid(req.params.id)));
+});
+
+r.post('/terms/:id/class-mismatches/fix', async (req, res) => {
+  const b = parse(
+    z.object({ students: z.array(z.string()).min(1) }),
+    req.body,
+  );
+  const pick = new Set(b.students);
+  const rows = (await classMismatches(oid(req.params.id))).filter((m) =>
+    pick.has(String(m.student)),
+  );
+  for (const m of rows) {
+    await TermResult.updateOne({ _id: m.resultId }, { class: m.toId });
+  }
+  res.json({ moved: rows.length });
 });
 
 /* ── End of session ── */

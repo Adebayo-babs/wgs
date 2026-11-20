@@ -145,8 +145,23 @@ r.patch('/:id', async (req, res) => {
     throw forbidden('You cannot move a student to that class');
   }
   if (b.parent) b.parent = { ...st.toObject().parent, ...b.parent };
+  const oldClass = String(st.class ?? '');
   st.set({ ...b, ...(b.class ? { class: oid(b.class) } : {}) });
   await st.save();
+
+  // Moved to another class mid-term: file this term's
+  // results under the new class too, so the report card,
+  // positions and score sheets follow the student. A term
+  // that's already published is left as it was.
+  if (b.class && b.class !== oldClass) {
+    const term = await currentTermOrNull();
+    if (term && !term.publishedAt) {
+      await TermResult.updateOne(
+        { student: st._id, term: term._id },
+        { class: st.class },
+      );
+    }
+  }
   res.json({ ok: true });
 });
 

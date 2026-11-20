@@ -6,7 +6,9 @@ import {
   Staff,
   Student,
   Subject,
+  Term,
   TermResult,
+  TERM_LABEL,
 } from '../models/index.js';
 import { notFound } from '../middleware/http.js';
 
@@ -61,7 +63,7 @@ export async function teacherOverview(staffId: Oid, termId: Oid) {
   const formIds = (staff.formClasses || []).map(S);
 
   // ── Grouped counts ──
-  const [qCounts, studentCounts, attemptStats, scoreCounts] =
+  const [qCounts, attemptStats, scoreCounts] =
     await Promise.all([
       Question.aggregate<{
         _id: { s: Oid; c: Oid | null };
@@ -78,10 +80,6 @@ export async function teacherOverview(staffId: Oid, termId: Oid) {
             },
           },
         },
-      ]),
-      Student.aggregate<{ _id: Oid; n: number }>([
-        { $match: { status: 'active' } },
-        { $group: { _id: '$class', n: { $sum: 1 } } },
       ]),
       ExamAttempt.aggregate<{
         _id: { s: Oid; c: Oid | null };
@@ -118,7 +116,7 @@ export async function teacherOverview(staffId: Oid, termId: Oid) {
     ]);
 
   const qMap = new Map(qCounts.map((q) => [key(q._id.s, q._id.c), q]));
-  const stuMap = new Map(studentCounts.map((s) => [S(s._id), s.n]));
+  const stuMap = await rosterSizes(termId);
   const attMap = new Map(attemptStats.map((a) => [key(a._id.s, a._id.c), a]));
   const scoreMap = new Map(scoreCounts.map((x) => [key(x._id.s, x._id.c), x.n]));
 
@@ -152,12 +150,10 @@ export async function teacherOverview(staffId: Oid, termId: Oid) {
   const formRows = await Promise.all(
     formIds.map(async (id) => {
       const oid = new Types.ObjectId(id);
-      const [students, results] = await Promise.all([
-        Student.countDocuments({ class: oid, status: 'active' }),
-        TermResult.find({ term: termId, class: oid })
-          .select('daysPresent traits remarks')
-          .lean(),
-      ]);
+      const students = stuMap.get(id) ?? 0;
+      const results = await TermResult.find({ term: termId, class: oid })
+        .select('daysPresent traits remarks')
+        .lean();
       return {
         classId: id,
         className: cls.get(id)?.name ?? '?',
@@ -180,7 +176,14 @@ export async function teacherOverview(staffId: Oid, termId: Oid) {
     0,
   );
 
+  const term = await Term.findById(termId).populate('session').lean();
+  const sess = term?.session as unknown as { name?: string } | undefined;
+  const assignedRows = subjectRows.filter((r) => r.assigned);
+
   return {
+    term: term
+      ? `${TERM_LABEL[term.number]} Term ${sess?.name ?? ''}`.trim()
+      : '',
     staff: {
       id: S(staff._id),
       name: staff.name,
@@ -192,16 +195,43 @@ export async function teacherOverview(staffId: Oid, termId: Oid) {
       students: totalStudents,
       classes: classIds.size,
       subjects: subjectRows.length,
+      // Every question in the subjects they teach, whoever
+      // typed it in, plus how many they typed themselves.
+      questions: assignedRows.reduce((n, r) => n + r.questions, 0),
       questionsByThem: await Question.countDocuments({
         term: termId,
         teacher: staff._id,
       }),
       examsTaken: subjectRows.reduce((n, r) => n + r.examsTaken, 0),
-      subjectsWithoutQuestions: subjectRows.filter(
+      subjectsWithoutQuestions: assignedRows.filter(
         (r) => r.questions + r.generalQuestions === 0,
       ).length,
     },
     subjects: subjectRows,
     formClasses: formRows,
   };
+}
+
+/* Students per class for a term — the same list the score
+   sheets show: anyone with a result filed in that class
+   this term, plus (for the current term) every active
+   student now in the class. Keeps "10 / 12" honest. */
+async function rosterSizes(termId: Oid) {
+  const term = await Term.findById(termId).lean();
+  const [results, students] = await Promise.all([
+    TermResult.find({ term: termId }).select('student class').lean(),
+    term?.isCurrent
+      ? Student.find({ status: 'active' }).select('_id class').lean()
+      : Promise.resolve([]),
+  ]);
+  const sets = new Map<string, Set<string>>();
+  const add = (cls: unknown, st: unknown) => {
+    if (!cls) return;
+    const k = S(cls);
+    if (!sets.has(k)) sets.set(k, new Set());
+    sets.get(k)!.add(S(st));
+  };
+  for (const r of results) add(r.class, r.student);
+  for (const s of students) add(s.class, s._id);
+  return new Map([...sets].map(([k, v]) => [k, v.size]));
 }

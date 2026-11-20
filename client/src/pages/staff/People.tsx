@@ -294,13 +294,17 @@ export function Team() {
       {q.isLoading && <Spinner />}
       <div className="grid gap-4 md:grid-cols-2">
         {q.data?.map((s) => (
-          <div key={s._id} className={`card ${s.active ? '' : 'opacity-60'}`}>
+          <div key={s._id} className={`card ${s.active ? '' : 'border-dashed bg-slate-50'}`}>
             <div className="mb-2 flex items-start justify-between">
               <div>
                 <div className="font-bold">{s.name}</div>
                 <div className="text-xs text-slate-500">
                   @{s.username} · <span className="capitalize">{s.role}</span>
-                  {!s.active && ' · inactive'}
+                  {!s.active && (
+                    <span className="badge ml-2 bg-slate-200 text-slate-600">
+                      Inactive, can't sign in
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="flex gap-1">

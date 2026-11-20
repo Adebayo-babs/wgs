@@ -17,13 +17,23 @@ import {
   type Decision,
 } from '../services/promotion.js';
 import { smtpConfigured } from '../config/env.js';
+import { AutomationLog } from '../models/index.js';
+import { autoAdvance, ensureNextSession } from '../services/automation.js';
 
 /* Sessions, terms, publishing and promotion — admin only. */
 const r = Router();
 r.use(requireStaff, requireAdmin);
 
 r.get('/sessions', async (_req, res) => {
+  await ensureNextSession();
   res.json({ sessions: await listSessions(), smtpConfigured });
+});
+
+/** Recent automatic actions, newest first. */
+r.get('/automation', async (_req, res) => {
+  res.json(
+    await AutomationLog.find().sort({ createdAt: -1 }).limit(20).lean(),
+  );
 });
 
 r.post('/sessions', async (req, res) => {
@@ -43,7 +53,16 @@ r.post('/sessions', async (req, res) => {
   res.status(201).json(s);
 });
 
+/* A date input sends "2027-01-12". Store it as midnight in
+   Lagos so the term opens at the start of that day. */
+const dateOnly = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2027-01-12')
+  .transform((d) => new Date(`${d}T00:00:00+01:00`))
+  .nullable();
+
 const termBody = z.object({
+  startsOn: dateOnly.optional(),
   termEnded: z.string().optional(),
   nextTermBegins: z.string().optional(),
   daysOpened: z.number().int().min(0).nullable().optional(),
@@ -53,6 +72,8 @@ r.patch('/terms/:id', async (req, res) => {
   const b = parse(termBody, req.body);
   const t = await Term.findByIdAndUpdate(oid(req.params.id), b, { new: true });
   if (!t) throw notFound('Term');
+  // A date that's today or already past takes effect now
+  if (b.startsOn) await autoAdvance();
   res.json(t);
 });
 
@@ -60,6 +81,18 @@ r.patch('/terms/:id', async (req, res) => {
 r.post('/terms/:id/activate', async (req, res) => {
   const t = await Term.findById(oid(req.params.id));
   if (!t) throw notFound('Term');
+  // Moving into another session must go through promotion
+  const cur = await Term.findOne({ isCurrent: true }).lean();
+  if (cur && String(cur.session) !== String(t.session)) {
+    const target = await AcademicSession.findById(t.session).lean();
+    if (target && !target.closedAt && !target.isCurrent) {
+      throw bad(
+        'That term is in the next session. Use "End session & promote ' +
+          'students", or set its start date and it will open by itself ' +
+          '(with promotion) on that day.',
+      );
+    }
+  }
   await Term.updateMany({}, { isCurrent: false });
   t.isCurrent = true;
   await t.save();

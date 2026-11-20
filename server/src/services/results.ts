@@ -19,6 +19,7 @@ import {
   type Grade,
 } from '../lib/grading.js';
 import { notFound } from '../middleware/http.js';
+import { nextTermOf } from './automation.js';
 
 type Oid = Types.ObjectId | string;
 const S = (v: unknown) => String(v);
@@ -351,6 +352,17 @@ export async function buildReport(
   const sess = term.session as unknown as { name: string };
   const daysOpened = term.daysOpened ?? null;
 
+  // "Next term begins": typed text wins, otherwise the next
+  // term's start date, e.g. "12th January 2027".
+  let nextBegins = term.nextTermBegins || '';
+  if (!nextBegins) {
+    const nt = await nextTermOf({
+      session: (term.session as unknown as { _id: unknown })._id,
+      number: term.number,
+    });
+    if (nt?.startsOn) nextBegins = longDate(nt.startsOn);
+  }
+
   return {
     school: { ...(settings.school as unknown as Record<string, string>) },
     published: !!term.publishedAt,
@@ -370,7 +382,7 @@ export async function buildReport(
       number: term.number,
       label: TERM_LABEL[term.number],
       termEnded: term.termEnded || '',
-      nextTermBegins: term.nextTermBegins || '',
+      nextTermBegins: nextBegins,
     },
     attendance: {
       opened: daysOpened,
@@ -449,4 +461,21 @@ export async function classBroadsheet(termId: Oid, classId: Oid) {
     isThirdTerm: cr.isThirdTerm,
     rows,
   };
+}
+
+/** 12th January 2027 (Lagos time). */
+export function longDate(d: Date) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'Africa/Lagos',
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  const day = Number(get('day'));
+  const sfx =
+    day % 100 >= 11 && day % 100 <= 13
+      ? 'th'
+      : ['th', 'st', 'nd', 'rd'][day % 10] ?? 'th';
+  return `${day}${day % 10 > 3 ? 'th' : sfx} ${get('month')} ${get('year')}`;
 }

@@ -84,6 +84,9 @@ const settingsSchema = new Schema(
     // this are suggested to repeat. 0 = promote everyone.
     repeatBelow: { type: Number, default: 0 },
     emailReportsOnPublish: { type: Boolean, default: true },
+    // Open each term on its start date, publishing the
+    // outgoing term and promoting students at session end.
+    autoAdvance: { type: Boolean, default: true },
   },
   { timestamps: true, minimize: false },
 );
@@ -94,3 +97,15 @@ export async function getSettings() {
   if (s) return s;
   return Settings.create({ key: 'school' });
 }
+
+/* What the automation did and when, shown on the Terms
+   page so the admin can see it. */
+const automationLogSchema = new Schema(
+  {
+    action: { type: String, required: true },
+    detail: { type: String, default: '' },
+    ok: { type: Boolean, default: true },
+  },
+  { timestamps: true },
+);
+export const AutomationLog = model('AutomationLog', automationLogSchema);

@@ -60,6 +60,9 @@ const termSchema = new Schema(
     isCurrent: { type: Boolean, default: false },
     termEnded: { type: String, default: '' },
     nextTermBegins: { type: String, default: '' },
+    // First day of the term. When it arrives, the system
+    // opens this term automatically (see automation.ts).
+    startsOn: { type: Date, default: null },
     daysOpened: { type: Number, default: null },
     publishedAt: { type: Date, default: null },
     delivery: { type: deliverySchema, default: () => ({}) },

@@ -16,6 +16,7 @@ import mongoose, { Types } from 'mongoose';
 import { connectDb } from '../config/db.js';
 import {
   AcademicSession,
+  AutomationLog,
   ExamAttempt,
   Passport,
   Question,
@@ -164,6 +165,7 @@ if (fresh) {
     Question.deleteMany({}),
     ExamAttempt.deleteMany({}),
     TermResult.deleteMany({}),
+    AutomationLog.deleteMany({}),
     Staff.deleteMany({ role: { $ne: 'admin' } }),
   ]);
   console.log('Cleared existing school data (admin kept).');

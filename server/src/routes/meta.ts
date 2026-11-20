@@ -163,6 +163,7 @@ const settingsBody = z.object({
     .optional(),
   repeatBelow: z.number().min(0).max(100).optional(),
   emailReportsOnPublish: z.boolean().optional(),
+  autoAdvance: z.boolean().optional(),
 });
 
 r.put('/settings', requireAdmin, async (req, res) => {
@@ -176,6 +177,7 @@ r.put('/settings', requireAdmin, async (req, res) => {
   if (b.emailReportsOnPublish != null) {
     s.emailReportsOnPublish = b.emailReportsOnPublish;
   }
+  if (b.autoAdvance != null) s.autoAdvance = b.autoAdvance;
   await s.save();
   res.json(s);
 });

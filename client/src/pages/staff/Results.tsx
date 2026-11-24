@@ -28,14 +28,17 @@ export function CbtResults() {
   const sc = useScope();
   const m = useM();
   const qc = useQueryClient();
+  const [term, setTerm] = useState(m.currentTerm?.id ?? '');
   const [cls, setCls] = useState('');
   const [subject, setSubject] = useState('');
   const [view, setView] = useState<string | null>(null);
+  const isCurrent = term === m.currentTerm?.id;
   const params = new URLSearchParams();
+  if (term) params.set('term', term);
   if (cls) params.set('class', cls);
   if (subject) params.set('subject', subject);
   const list = useQuery({
-    queryKey: ['attempts', cls, subject],
+    queryKey: ['attempts', term, cls, subject],
     queryFn: () => staffApi<Attempt[]>(`/attempts?${params}`),
   });
   const reset = useMutation({
@@ -60,6 +63,7 @@ export function CbtResults() {
         sub="Scores are scaled to the 60-mark exam column and go straight onto the report card, unless a teacher has typed an exam score by hand."
       />
       <div className="card mb-5 flex flex-wrap gap-3">
+        <Field label="Term"><TermSelect value={term} onChange={setTerm} /></Field>
         <Field label="Class">
           <select className="input" value={cls} onChange={(e) => setCls(e.target.value)}>
             <option value="">All my classes</option>
@@ -74,7 +78,16 @@ export function CbtResults() {
         </Field>
       </div>
       {list.isLoading && <Spinner />}
-      {list.data && !list.data.length && <Empty>No exam submissions yet.</Empty>}
+      {list.data && !list.data.length && (
+        <Empty>
+          No exam submissions {isCurrent ? 'yet this term' : 'for this term'}.
+          {isCurrent && (
+            <div className="mt-1 text-xs">
+              Exams sat in earlier terms are kept there. Pick the term above to see them.
+            </div>
+          )}
+        </Empty>
+      )}
       {list.data && list.data.length > 0 && (
         <div className="card overflow-x-auto p-0">
           <table className="tbl">
@@ -113,15 +126,17 @@ export function CbtResults() {
                     {a.status === 'submitted' && (
                       <button className="btn-sm btn-ghost mr-1" onClick={() => setView(a._id)}>Answers</button>
                     )}
-                    <button
-                      className="btn-sm btn text-red-600 hover:bg-red-50"
-                      onClick={() =>
-                        confirm(`Reset ${a.student?.name}'s ${a.subject?.name} exam? They will be able to retake it.`) &&
-                        reset.mutate(a._id)
-                      }
-                    >
-                      Reset
-                    </button>
+                    {isCurrent && (
+                      <button
+                        className="btn-sm btn text-red-600 hover:bg-red-50"
+                        onClick={() =>
+                          confirm(`Reset ${a.student?.name}'s ${a.subject?.name} exam? They will be able to retake it.`) &&
+                          reset.mutate(a._id)
+                        }
+                      >
+                        Reset
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

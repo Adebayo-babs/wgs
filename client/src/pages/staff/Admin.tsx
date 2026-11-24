@@ -7,6 +7,95 @@ import { useM } from './shell';
 
 const TL = ['', '1st', '2nd', '3rd'];
 
+/** "2027-01-11" in Lagos time, for date inputs. */
+const ymd = (iso?: string | null) =>
+  iso ? new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' }) : '';
+/** "11 Jan 2027" */
+const nice = (iso?: string | null) =>
+  iso
+    ? new Date(iso).toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'Africa/Lagos',
+      })
+    : '';
+
+function nextSessionName(name: string) {
+  const m = name.match(/(\d{4})\D+(\d{4})/);
+  return m ? `${+m[1] + 1}/${+m[2] + 1}` : '';
+}
+
+/** The term after the current one, and whether it starts a new session. */
+function upcoming(sessions: SessionInfo[]) {
+  const cs = sessions.find((s) => s.terms.some((t) => t.isCurrent));
+  const ct = cs?.terms.find((t) => t.isCurrent);
+  if (!cs || !ct) return null;
+  if (ct.number < 3) {
+    const nt = cs.terms.find((t) => t.number === ct.number + 1);
+    return nt ? { cur: ct, curSession: cs, next: nt, nextSession: cs, newSession: false } : null;
+  }
+  const ns = sessions.find((s) => s.name === nextSessionName(cs.name));
+  const nt = ns?.terms.find((t) => t.number === 1);
+  return ns && nt ? { cur: ct, curSession: cs, next: nt, nextSession: ns, newSession: true } : null;
+}
+
+/* What the system will do next, and when. */
+function AutoBanner({ sessions, onSetDate }: { sessions: SessionInfo[]; onSetDate: (t: TermInfo, s: SessionInfo) => void }) {
+  const st = useQuery({ queryKey: ['settings'], queryFn: () => staffApi<{ autoAdvance: boolean }>('/settings') });
+  const u = upcoming(sessions);
+  if (!u) return null;
+  const curName = `${TL[u.cur.number]} Term ${u.curSession.name}`;
+  const nextName = `${TL[u.next.number]} Term ${u.nextSession.name}`;
+  if (st.data && !st.data.autoAdvance) {
+    return (
+      <div className="mb-4 rounded-lg bg-slate-100 p-3 text-sm text-slate-700">
+        Automatic term changes are <b>off</b> (School setup). Use the buttons below to move terms by hand.
+      </div>
+    );
+  }
+  if (!u.next.startsOn) {
+    return (
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+        <span>
+          Set the start date of <b>{nextName}</b> and the system will open it by itself on that day.
+        </span>
+        <button className="btn-sm btn-primary" onClick={() => onSetDate(u.next, u.nextSession)}>Set start date</button>
+      </div>
+    );
+  }
+  return (
+    <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+      <b>Automatic, on {nice(u.next.startsOn)}:</b>{' '}
+      {!u.cur.publishedAt && <>{curName} results are published (parents emailed), </>}
+      {u.newSession && <>every student is promoted to their next class, </>}
+      and <b>{nextName}</b> opens.
+    </div>
+  );
+}
+
+type LogRow = { _id: string; action: string; detail: string; ok: boolean; createdAt: string };
+
+function ActivityLog() {
+  const q = useQuery({ queryKey: ['automation-log'], queryFn: () => staffApi<LogRow[]>('/admin/automation') });
+  if (!q.data?.length) return null;
+  return (
+    <div className="card mt-5">
+      <h3 className="mb-2 font-bold">What the system did automatically</h3>
+      <ul className="space-y-1 text-sm">
+        {q.data.map((x) => (
+          <li key={x._id} className={x.ok ? '' : 'text-red-700'}>
+            <span className="mr-2 text-xs text-slate-400">
+              {new Date(x.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
+            </span>
+            <b>{x.action}</b> — {x.detail}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /* ══════════════ Terms, publishing, promotion ══════════════ */
 export function Terms() {
   const qc = useQueryClient();
@@ -16,7 +105,7 @@ export function Terms() {
     refetchInterval: (query) =>
       query.state.data?.sessions.some((s) => s.terms.some((t) => t.delivery?.running)) ? 3000 : false,
   });
-  const [editTerm, setEditTerm] = useState<TermInfo | null>(null);
+  const [editTerm, setEditTerm] = useState<{ t: TermInfo; s: SessionInfo } | null>(null);
   const [delivery, setDelivery] = useState<TermInfo | null>(null);
   const [promote, setPromote] = useState<SessionInfo | null>(null);
   const [newSession, setNewSession] = useState('');
@@ -58,6 +147,7 @@ export function Terms() {
           <button className="btn-primary" onClick={() => create.mutate()}>Create</button>
         </div>
       )}
+      <AutoBanner sessions={sessions} onSetDate={(t, s) => setEditTerm({ t, s })} />
       {sessions.flatMap((s) => s.terms).filter((t) => t.isCurrent).map((t) => (
         <ClassMismatches key={t._id} termId={t._id} />
       ))}
@@ -70,7 +160,7 @@ export function Terms() {
                 {s.isCurrent && <span className="badge ml-2 bg-navy text-white">Current</span>}
                 {s.closedAt && <span className="badge ml-2 bg-slate-200 text-slate-600">Closed</span>}
               </h3>
-              {!s.closedAt && (
+              {!s.closedAt && s.isCurrent && (
                 <button className="btn-gold btn-sm" onClick={() => setPromote(s)}>End session & promote students</button>
               )}
             </div>
@@ -82,6 +172,9 @@ export function Terms() {
                     {t.isCurrent && <span className="badge bg-gold text-navy">Current</span>}
                   </div>
                   <div className="mb-3 space-y-0.5 text-xs text-slate-600">
+                    <div className="font-semibold text-slate-700">
+                      Starts: {t.startsOn ? nice(t.startsOn) : 'not set'}
+                    </div>
                     <div>Term ended: {t.termEnded || '—'}</div>
                     <div>Next term begins: {t.nextTermBegins || '—'}</div>
                     <div>Days opened: {t.daysOpened ?? '—'}</div>
@@ -98,7 +191,7 @@ export function Terms() {
                     )}
                   </div>
                   <div className="flex flex-wrap gap-1">
-                    <button className="btn-sm btn-ghost" onClick={() => setEditTerm(t)}>Edit dates</button>
+                    <button className="btn-sm btn-ghost" onClick={() => setEditTerm({ t, s })}>Edit dates</button>
                     {!t.isCurrent && !s.closedAt && (
                       <button className="btn-sm btn-ghost" onClick={() => confirm(`Make ${TL[t.number]} Term ${s.name} the current term? New exams and scores will go into it.`) && act.mutate({ path: `/admin/terms/${t._id}/activate` })}>
                         Make current
@@ -129,7 +222,18 @@ export function Terms() {
           </div>
         ))}
       </div>
-      {editTerm && <TermForm t={editTerm} onClose={() => setEditTerm(null)} onDone={refresh} />}
+      {editTerm && (
+        <TermForm
+          t={editTerm.t}
+          session={editTerm.s}
+          onClose={() => setEditTerm(null)}
+          onDone={() => {
+            refresh();
+            qc.invalidateQueries({ queryKey: ['automation-log'] });
+          }}
+        />
+      )}
+      <ActivityLog />
       {delivery && <Delivery t={delivery} onClose={() => setDelivery(null)} onResend={refresh} />}
       {promote && <Promotion s={promote} onClose={() => setPromote(null)} onDone={refresh} />}
     </>
@@ -233,15 +337,23 @@ function ClassMismatches({ termId }: { termId: string }) {
   );
 }
 
-function TermForm(p: { t: TermInfo; onClose: () => void; onDone: () => void }) {
+function TermForm(p: { t: TermInfo; session: SessionInfo; onClose: () => void; onDone: () => void }) {
+  const [startsOn, setStartsOn] = useState(ymd(p.t.startsOn));
   const [termEnded, setEnded] = useState(p.t.termEnded);
   const [nextTermBegins, setNext] = useState(p.t.nextTermBegins);
   const [days, setDays] = useState(p.t.daysOpened?.toString() ?? '');
+  const today = ymd(new Date().toISOString());
+  const startsNewSession = p.t.number === 1 && !p.session.isCurrent && !p.session.closedAt;
   const m = useMutation({
     mutationFn: () =>
       staffApi(`/admin/terms/${p.t._id}`, {
         method: 'PATCH',
-        body: { termEnded, nextTermBegins, daysOpened: days ? Number(days) : null },
+        body: {
+          startsOn: startsOn || null,
+          termEnded,
+          nextTermBegins,
+          daysOpened: days ? Number(days) : null,
+        },
       }),
     onSuccess: () => {
       toast.ok('Saved');
@@ -250,14 +362,42 @@ function TermForm(p: { t: TermInfo; onClose: () => void; onDone: () => void }) {
     },
     onError: toast.err,
   });
+  const save = () => {
+    const changed = startsOn && startsOn !== ymd(p.t.startsOn);
+    if (changed && !p.t.isCurrent && !p.t.publishedAt && startsOn <= today) {
+      const msg = [
+        'That date is today or already past, so the change happens as soon as you save:',
+        '',
+        '• the current term’s results are published (parents emailed)',
+        ...(startsNewSession ? ['• every student is promoted to their next class'] : []),
+        `• ${TL[p.t.number]} Term ${p.session.name} opens`,
+        '',
+        'Continue?',
+      ].join('\n');
+      if (!confirm(msg)) return;
+    }
+    m.mutate();
+  };
   return (
-    <Modal title={`${TL[p.t.number]} Term details`} onClose={p.onClose}>
+    <Modal title={`${TL[p.t.number]} Term ${p.session.name}`} onClose={p.onClose}>
       <div className="space-y-3">
+        <Field
+          label="Term starts on"
+          hint={
+            startsNewSession
+              ? 'On this day the system publishes the last term, promotes every student and opens this term.'
+              : 'On this day the system publishes the previous term and opens this one.'
+          }
+        >
+          <input className="input" type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} />
+        </Field>
         <Field label="Term ended"><input className="input" value={termEnded} onChange={(e) => setEnded(e.target.value)} placeholder="30th July 2026" /></Field>
-        <Field label="Next term begins"><input className="input" value={nextTermBegins} onChange={(e) => setNext(e.target.value)} placeholder="14th September 2026" /></Field>
+        <Field label="Next term begins" hint="Leave blank to use the next term’s start date automatically.">
+          <input className="input" value={nextTermBegins} onChange={(e) => setNext(e.target.value)} placeholder="Filled in automatically" />
+        </Field>
         <Field label="Days school opened"><input className="input" type="number" value={days} onChange={(e) => setDays(e.target.value)} /></Field>
         <p className="text-xs text-slate-500">These appear on every report card for this term.</p>
-        <button className="btn-primary" onClick={() => m.mutate()} disabled={m.isPending}>Save</button>
+        <button className="btn-primary" onClick={save} disabled={m.isPending}>Save</button>
       </div>
     </Modal>
   );
@@ -420,6 +560,7 @@ type Settings = {
   remarks: Record<string, Record<string, string[]>>;
   repeatBelow: number;
   emailReportsOnPublish: boolean;
+  autoAdvance: boolean;
 };
 
 export function SchoolSetup() {
@@ -469,6 +610,21 @@ export function SchoolSetup() {
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={s.emailReportsOnPublish} onChange={(e) => setS({ ...s, emailReportsOnPublish: e.target.checked })} />
             Email report cards to parents when a term is published
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={s.autoAdvance}
+              onChange={(e) => setS({ ...s, autoAdvance: e.target.checked })}
+            />
+            <span>
+              Change terms automatically on their start dates
+              <span className="block text-xs text-slate-500">
+                Publishes the term that’s ending, opens the next one, and at
+                the start of a new session promotes every student.
+              </span>
+            </span>
           </label>
           <Field label="Suggest repeating below (cumulative average)" hint="0 = promote everyone by default. The admin always confirms.">
             <input className="input w-32" type="number" min={0} max={100} value={s.repeatBelow} onChange={(e) => setS({ ...s, repeatBelow: Number(e.target.value) })} />

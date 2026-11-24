@@ -24,6 +24,7 @@ export interface TermInfo {
   nextTermBegins: string;
   daysOpened: number | null;
   publishedAt: string | null;
+  startsOn?: string | null;
   delivery?: {
     running: boolean;
     sent: number;
